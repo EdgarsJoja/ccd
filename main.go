@@ -101,8 +101,8 @@ func (m model) View() string {
 
 	s := currentDirStyle.Render(fmt.Sprintf("%s", m.dir))
 
-	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("#FF0066")).Bold(true)
-	var defaultStyle = styleRenderer.NewStyle().Faint(true).Bold(true)
+	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("#FF0066"))
+	var defaultStyle = styleRenderer.NewStyle().Faint(true)
 
 	for i, v := range m.dirItems {
 		if i == m.active {
