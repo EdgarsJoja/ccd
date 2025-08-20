@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -18,6 +19,8 @@ type model struct {
 	quitting      bool
 	chosenDir     string
 	showHidden    bool
+	ready         bool
+	viewport      viewport.Model
 }
 
 func initialModel() model {
@@ -41,11 +44,46 @@ func initialModel() model {
 	}
 }
 
+func (m *model) getHeaderView() string {
+	var currentDirStyle = styleRenderer.NewStyle().PaddingLeft(2).BorderStyle(lipgloss.MarkdownBorder()).BorderBottom(true)
+	return currentDirStyle.Render(m.dir)
+}
+
+func (m *model) getContent() string {
+	s := ""
+
+	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("#FF0066"))
+	var defaultStyle = styleRenderer.NewStyle()
+
+	for i, v := range m.dirItems {
+		var line string
+
+		if i == m.active {
+			line = activeStyle.Render(fmt.Sprintf("> %s", v.name))
+		} else {
+			line = defaultStyle.Render(fmt.Sprintf("  %s", v.name))
+		}
+
+		if i == 0 {
+			s = line
+		} else {
+			s = lipgloss.JoinVertical(0, s, line)
+		}
+	}
+
+	return s
+}
+
 func (m model) Init() tea.Cmd {
 	return nil
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -60,18 +98,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showHidden = !m.showHidden
 			m.dirItems = List(m.dir, m.showHidden)
 			m.active = 0
+
+			m.viewport.SetContent(m.getContent())
 		case "up":
 			if m.active > 0 {
 				m.active -= 1
-			} else {
-				m.active = len(m.dirItems) - 1
 			}
+
+			m.viewport.SetContent(m.getContent())
 		case "down":
 			if m.active < len(m.dirItems)-1 {
 				m.active += 1
-			} else {
-				m.active = 0
 			}
+
+			m.viewport.SetContent(m.getContent())
 		case "enter":
 			m.activeHistory[m.dir] = m.active
 			m.dir = PushPath(m.dir, m.dirItems[m.active].name)
@@ -83,6 +123,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.active = 0
 			}
+
+			m.viewport.SetContent(m.getContent())
+			m.viewport.SetYOffset(m.active)
 		case "backspace", "esc":
 			m.activeHistory[m.dir] = m.active
 			m.dir = PopPath(m.dir)
@@ -94,10 +137,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.active = 0
 			}
+
+			m.viewport.SetContent(m.getContent())
+			m.viewport.SetYOffset(m.active)
+		}
+	case tea.WindowSizeMsg:
+		headerHeight := lipgloss.Height(m.getHeaderView())
+
+		if !m.ready {
+			m.viewport = viewport.New(msg.Width, msg.Height-headerHeight)
+			m.viewport.YPosition = headerHeight
+			m.viewport.SetContent(m.getContent())
+			m.ready = true
+		} else {
+			m.viewport.Width = msg.Width
+			m.viewport.Height = msg.Height - headerHeight
 		}
 	}
 
-	return m, nil
+	m.viewport, cmd = m.viewport.Update(msg)
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
@@ -105,22 +166,11 @@ func (m model) View() string {
 		return ""
 	}
 
-	var currentDirStyle = styleRenderer.NewStyle().PaddingLeft(2).BorderStyle(lipgloss.MarkdownBorder()).BorderBottom(true)
-
-	s := currentDirStyle.Render(m.dir)
-
-	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("#FF0066"))
-	var defaultStyle = styleRenderer.NewStyle()
-
-	for i, v := range m.dirItems {
-		if i == m.active {
-			s = lipgloss.JoinVertical(0, s, activeStyle.Render(fmt.Sprintf("> %s", v.name)))
-		} else {
-			s = lipgloss.JoinVertical(0, s, defaultStyle.Render(fmt.Sprintf("  %s", v.name)))
-		}
+	if !m.ready {
+		return "\n Initializing..."
 	}
 
-	return s
+	return fmt.Sprintf("%s\n%s", m.getHeaderView(), m.viewport.View())
 }
 
 func main() {
