@@ -5,7 +5,10 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
+
+var styleRenderer = lipgloss.NewRenderer(os.Stderr)
 
 type model struct {
 	dir           string
@@ -42,8 +45,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
 			m.quitting = true
+			return m, tea.Quit
+		case "q":
+			m.quitting = true
+			m.chosenDir = m.dir
 			return m, tea.Quit
 		case "up":
 			if m.active > 0 {
@@ -90,16 +97,19 @@ func (m model) View() string {
 		return ""
 	}
 
-	s := fmt.Sprintf("   %s\n   -----\n", m.dir)
+	var currentDirStyle = styleRenderer.NewStyle().PaddingLeft(2).BorderStyle(lipgloss.MarkdownBorder()).BorderBottom(true)
+
+	s := currentDirStyle.Render(fmt.Sprintf("%s", m.dir))
+
+	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("#FF0066")).Bold(true)
+	var defaultStyle = styleRenderer.NewStyle().Faint(true).Bold(true)
 
 	for i, v := range m.dirItems {
-		var activeIndicator string = " "
-
 		if i == m.active {
-			activeIndicator = ">"
+			s = lipgloss.JoinVertical(0, s, activeStyle.Render(fmt.Sprintf("> %s", v.name)))
+		} else {
+			s = lipgloss.JoinVertical(0, s, defaultStyle.Render(fmt.Sprintf("  %s", v.name)))
 		}
-
-		s += fmt.Sprintf(" %s %s\n", activeIndicator, v.name)
 	}
 
 	return s
@@ -114,6 +124,9 @@ func main() {
 
 	m := fm.(model)
 
-	fmt.Print(m.dir)
+	if m.chosenDir != "" {
+		fmt.Print(m.dir)
+	}
+
 	os.Exit(0)
 }
