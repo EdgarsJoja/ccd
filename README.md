@@ -28,6 +28,6 @@ ccd() {
 
 ### Todo
 
-[ ] Directory filter
-[ ] Help output
-[ ] Persistent memory between runs
+- [ ] Directory filter
+- [ ] Help output
+- [ ] Persistent memory between runs
