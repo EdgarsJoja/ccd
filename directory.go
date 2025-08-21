@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"os"
 	"strings"
 )
@@ -15,7 +15,8 @@ type DirItem struct {
 func List(dir string, listHidden bool) []DirItem {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Print(err)
+		return []DirItem{}
 	}
 
 	var items []DirItem
