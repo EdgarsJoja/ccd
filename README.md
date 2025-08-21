@@ -17,8 +17,6 @@ Use `ctrl+c` to exit without cd operation.
 
 Integration with various shells.
 
-Copied from the [zoxide](https://github.com/ajeetdsouza/zoxide) project.
-
 ### Bash/Zsh
 ```bash
 ccd() {
