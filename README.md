@@ -1,6 +1,8 @@
 # Interactive CD command
 
-## Usage
+Setup and simply run `ccd` in terminal.
+
+## Keymap
 Use keys `up` and `down` to choose directory.
 
 Use `right` or `enter` to select chosen directory.
@@ -26,7 +28,7 @@ ccd() {
 }
 ```
 
-### Todo
+## Todo
 
 - [ ] Directory filter
 - [ ] Help output
