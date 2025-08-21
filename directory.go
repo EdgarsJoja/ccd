@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -39,11 +38,20 @@ func List(dir string, listHidden bool) []DirItem {
 func PopPath(dir string) string {
 	parts := strings.Split(dir, "/")
 
+	if len(parts) == 2 {
+		return "/"
+	}
+
 	parts = parts[:len(parts)-1]
 
 	return strings.Join(parts, "/")
 }
 
 func PushPath(dir string, path string) string {
-	return dir + fmt.Sprintf("/%s", path)
+	prefix := "/"
+	if dir == "/" {
+		prefix = ""
+	}
+
+	return dir + prefix + path
 }
