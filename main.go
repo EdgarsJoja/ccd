@@ -52,7 +52,7 @@ func (m *model) getHeaderView() string {
 func (m *model) getContent() string {
 	s := ""
 
-	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("#FF0066"))
+	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("#16FF00"))
 	var defaultStyle = styleRenderer.NewStyle()
 
 	for i, v := range m.dirItems {
@@ -112,7 +112,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			m.viewport.SetContent(m.getContent())
-		case "enter":
+		case "enter", "right":
 			m.activeHistory[m.dir] = m.active
 			m.dir = PushPath(m.dir, m.dirItems[m.active].name)
 			m.dirItems = List(m.dir, m.showHidden)
@@ -126,7 +126,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.viewport.SetContent(m.getContent())
 			m.viewport.SetYOffset(m.active)
-		case "backspace", "esc":
+		case "backspace", "esc", "left":
 			m.activeHistory[m.dir] = m.active
 			m.dir = PopPath(m.dir)
 			m.dirItems = List(m.dir, m.showHidden)
