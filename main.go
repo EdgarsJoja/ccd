@@ -113,6 +113,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.viewport.SetContent(m.getContent())
 		case "enter", "right":
+			if m.active >= len(m.dirItems) {
+				break
+			}
+
 			m.activeHistory[m.dir] = m.active
 			m.dir = PushPath(m.dir, m.dirItems[m.active].name)
 			m.dirItems = List(m.dir, m.showHidden)
