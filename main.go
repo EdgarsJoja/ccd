@@ -21,6 +21,7 @@ type model struct {
 	showHidden    bool
 	ready         bool
 	viewport      viewport.Model
+	error         error
 }
 
 func initialModel() model {
@@ -32,27 +33,49 @@ func initialModel() model {
 	}
 
 	defaultShowHidden := false
+	dirItems, err := List(defaultDir, defaultShowHidden)
 
 	return model{
 		dir:           defaultDir,
-		dirItems:      List(defaultDir, defaultShowHidden),
+		dirItems:      dirItems,
 		activeHistory: map[string]int{},
 		active:        0,
 		quitting:      false,
 		chosenDir:     "",
 		showHidden:    defaultShowHidden,
+		error:         err,
 	}
 }
 
 func (m *model) getHeaderView() string {
-	var currentDirStyle = styleRenderer.NewStyle().PaddingLeft(2).BorderStyle(lipgloss.MarkdownBorder()).BorderBottom(true)
+	var currentDirStyle = styleRenderer.NewStyle().Width(m.viewport.Width).PaddingLeft(2).BorderStyle(lipgloss.MarkdownBorder()).BorderBottom(true).BorderForeground(lipgloss.Color("#666"))
 	return currentDirStyle.Render(m.dir)
+}
+
+func (m *model) getFooterView() string {
+	footerStyle := styleRenderer.NewStyle().Width(m.viewport.Width)
+
+	hidden := "off"
+	if m.showHidden {
+		hidden = "on"
+	}
+
+	hiddenStyle := styleRenderer.NewStyle().PaddingLeft(2).Faint(true)
+	hiddenText := hiddenStyle.Render(fmt.Sprintf("Hidden: %s", hidden))
+
+	errorText := ""
+	if m.error != nil {
+		errorStyle := styleRenderer.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("1"))
+		errorText = errorStyle.Render(m.error.Error())
+	}
+
+	return footerStyle.Render(lipgloss.JoinHorizontal(0, hiddenText, errorText))
 }
 
 func (m *model) getContent() string {
 	s := ""
 
-	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("#16FF00"))
+	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("2"))
 	var defaultStyle = styleRenderer.NewStyle()
 
 	for i, v := range m.dirItems {
@@ -96,7 +119,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "h":
 			m.showHidden = !m.showHidden
-			m.dirItems = List(m.dir, m.showHidden)
+			m.dirItems, m.error = List(m.dir, m.showHidden)
 			m.active = 0
 
 			m.viewport.SetContent(m.getContent())
@@ -119,7 +142,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.activeHistory[m.dir] = m.active
 			m.dir = PushPath(m.dir, m.dirItems[m.active].name)
-			m.dirItems = List(m.dir, m.showHidden)
+			m.dirItems, m.error = List(m.dir, m.showHidden)
 
 			active, containsKey := m.activeHistory[m.dir]
 			if containsKey {
@@ -133,7 +156,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "backspace", "esc", "left":
 			m.activeHistory[m.dir] = m.active
 			m.dir = PopPath(m.dir)
-			m.dirItems = List(m.dir, m.showHidden)
+			m.dirItems, m.error = List(m.dir, m.showHidden)
 
 			active, containsKey := m.activeHistory[m.dir]
 			if containsKey {
@@ -147,15 +170,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		headerHeight := lipgloss.Height(m.getHeaderView())
+		footerHeight := lipgloss.Height(m.getFooterView())
 
 		if !m.ready {
-			m.viewport = viewport.New(msg.Width, msg.Height-headerHeight)
+			m.viewport = viewport.New(msg.Width, msg.Height-headerHeight-footerHeight)
 			m.viewport.YPosition = headerHeight
 			m.viewport.SetContent(m.getContent())
 			m.ready = true
 		} else {
 			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - headerHeight
+			m.viewport.Height = msg.Height - headerHeight - footerHeight
 		}
 	}
 
@@ -174,7 +198,7 @@ func (m model) View() string {
 		return "\n Initializing..."
 	}
 
-	return fmt.Sprintf("%s\n%s", m.getHeaderView(), m.viewport.View())
+	return fmt.Sprintf("%s\n%s\n%s", m.getHeaderView(), m.viewport.View(), m.getFooterView())
 }
 
 func main() {

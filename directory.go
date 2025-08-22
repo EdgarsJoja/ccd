@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strings"
 )
@@ -12,11 +11,10 @@ type DirItem struct {
 	name     string
 }
 
-func List(dir string, listHidden bool) []DirItem {
+func List(dir string, listHidden bool) ([]DirItem, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		fmt.Print(err)
-		return []DirItem{}
+		return []DirItem{}, err
 	}
 
 	var items []DirItem
@@ -33,7 +31,7 @@ func List(dir string, listHidden bool) []DirItem {
 		items = append(items, DirItem{name: e.Name(), isDir: true, isHidden: e.Name()[0] == '.'})
 	}
 
-	return items
+	return items, nil
 }
 
 func PopPath(dir string) string {

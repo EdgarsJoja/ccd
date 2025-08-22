@@ -33,3 +33,4 @@ ccd() {
 - [ ] Directory filter
 - [ ] Help output
 - [ ] Persistent memory between runs
+- [x] Status bar (hidden status, error message)
