@@ -48,7 +48,7 @@ func initialModel() model {
 }
 
 func (m *model) getHeaderView() string {
-	var currentDirStyle = styleRenderer.NewStyle().Width(m.viewport.Width).PaddingLeft(2).BorderStyle(lipgloss.MarkdownBorder()).BorderBottom(true).BorderForeground(lipgloss.Color("#666"))
+	var currentDirStyle = styleRenderer.NewStyle().Width(m.viewport.Width).PaddingLeft(2).PaddingBottom(1)
 	return currentDirStyle.Render(m.dir)
 }
 
@@ -75,7 +75,7 @@ func (m *model) getFooterView() string {
 func (m *model) getContent() string {
 	s := ""
 
-	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("2"))
+	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
 	var defaultStyle = styleRenderer.NewStyle()
 
 	for i, v := range m.dirItems {
