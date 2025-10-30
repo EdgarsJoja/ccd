@@ -2,6 +2,10 @@
 
 Setup and simply run `ccd` in terminal.
 
+![Listing directories](docs/screenshot-1.png "Listing directories")
+
+![Permission error](docs/screenshot-2.png "Permission error")
+
 ## Keymap
 Use keys `up` and `down` to choose directory.
 
