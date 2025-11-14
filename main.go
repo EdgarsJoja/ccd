@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 )
 
 var styleRenderer = lipgloss.NewRenderer(os.Stderr)
@@ -48,24 +49,24 @@ func initialModel() model {
 }
 
 func (m *model) getHeaderView() string {
-	var currentDirStyle = styleRenderer.NewStyle().Width(m.viewport.Width).PaddingLeft(2).PaddingBottom(1)
-	return currentDirStyle.Render(m.dir)
+	var currentDirStyle = styleRenderer.NewStyle().Width(m.viewport.Width).PaddingLeft(2).MarginBottom(1).Background(colors["secondaryBackground"])
+	return currentDirStyle.Render(fmt.Sprintf("dir: %s", m.dir))
 }
 
 func (m *model) getFooterView() string {
-	footerStyle := styleRenderer.NewStyle().Width(m.viewport.Width)
+	footerStyle := styleRenderer.NewStyle().Width(m.viewport.Width).MarginTop(1).Background(colors["secondaryBackground"])
 
 	hidden := "off"
 	if m.showHidden {
 		hidden = "on"
 	}
 
-	hiddenStyle := styleRenderer.NewStyle().PaddingLeft(2).Faint(true)
+	hiddenStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(colors["tertiaryBackground"])
 	hiddenText := hiddenStyle.Render(fmt.Sprintf("Hidden: %s", hidden))
 
 	errorText := ""
 	if m.error != nil {
-		errorStyle := styleRenderer.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("1"))
+		errorStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(colors["error"])
 		errorText = errorStyle.Render(m.error.Error())
 	}
 
@@ -73,10 +74,14 @@ func (m *model) getFooterView() string {
 }
 
 func (m *model) getContent() string {
-	s := ""
+	var activeStyle = styleRenderer.NewStyle().Foreground(colors["info"]).Bold(true)
+	var defaultStyle = styleRenderer.NewStyle().Foreground(colors["primaryContent"])
 
-	var activeStyle = styleRenderer.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
-	var defaultStyle = styleRenderer.NewStyle()
+	rowStyle := styleRenderer.NewStyle().Background(colors["primaryBackground"])
+
+	table := table.New().Width(m.viewport.Width).BorderTop(false).BorderRight(false).BorderBottom(false).BorderLeft(false).StyleFunc(func(row, col int) lipgloss.Style {
+		return rowStyle
+	})
 
 	for i, v := range m.dirItems {
 		var line string
@@ -87,14 +92,10 @@ func (m *model) getContent() string {
 			line = defaultStyle.Render(fmt.Sprintf("  %s", v.name))
 		}
 
-		if i == 0 {
-			s = line
-		} else {
-			s = lipgloss.JoinVertical(0, s, line)
-		}
+		table.Row(line)
 	}
 
-	return s
+	return table.Render()
 }
 
 func (m model) Init() tea.Cmd {
@@ -123,18 +124,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.active = 0
 
 			m.viewport.SetContent(m.getContent())
+			m.viewport.SetYOffset(m.active - m.viewport.VisibleLineCount()/2)
 		case "up":
 			if m.active > 0 {
 				m.active -= 1
 			}
 
 			m.viewport.SetContent(m.getContent())
+			m.viewport.SetYOffset(m.active - m.viewport.VisibleLineCount()/2)
 		case "down":
 			if m.active < len(m.dirItems)-1 {
 				m.active += 1
 			}
 
 			m.viewport.SetContent(m.getContent())
+			m.viewport.SetYOffset(m.active - m.viewport.VisibleLineCount()/2)
 		case "enter", "right":
 			if m.active >= len(m.dirItems) {
 				break
@@ -152,7 +156,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			m.viewport.SetContent(m.getContent())
-			m.viewport.SetYOffset(m.active)
+			m.viewport.SetYOffset(m.active - m.viewport.VisibleLineCount()/2)
 		case "backspace", "esc", "left":
 			m.activeHistory[m.dir] = m.active
 			m.dir = PopPath(m.dir)
@@ -166,7 +170,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			m.viewport.SetContent(m.getContent())
-			m.viewport.SetYOffset(m.active)
+			m.viewport.SetYOffset(m.active - m.viewport.VisibleLineCount()/2)
 		}
 	case tea.WindowSizeMsg:
 		headerHeight := lipgloss.Height(m.getHeaderView())
@@ -190,6 +194,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	appStyle := styleRenderer.NewStyle().Background(colors["primaryBackground"])
+
 	if m.quitting {
 		return ""
 	}
@@ -198,7 +204,7 @@ func (m model) View() string {
 		return "\n Initializing..."
 	}
 
-	return fmt.Sprintf("%s\n%s\n%s", m.getHeaderView(), m.viewport.View(), m.getFooterView())
+	return appStyle.Render(fmt.Sprintf("%s\n%s\n%s", m.getHeaderView(), m.viewport.View(), m.getFooterView()))
 }
 
 func main() {
