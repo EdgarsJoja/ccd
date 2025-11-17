@@ -23,6 +23,7 @@ type model struct {
 	ready         bool
 	viewport      viewport.Model
 	error         error
+	theme         Theme
 }
 
 func initialModel() model {
@@ -45,28 +46,29 @@ func initialModel() model {
 		chosenDir:     "",
 		showHidden:    defaultShowHidden,
 		error:         err,
+		theme:         darkTheme,
 	}
 }
 
 func (m *model) getHeaderView() string {
-	var currentDirStyle = styleRenderer.NewStyle().Width(m.viewport.Width).PaddingLeft(2).MarginBottom(1).Background(colors["secondaryBackground"]).Foreground(colors["primaryContent"])
+	var currentDirStyle = styleRenderer.NewStyle().Width(m.viewport.Width).PaddingLeft(2).MarginBottom(1).Background(m.theme.secondaryBackground).Foreground(m.theme.primaryContent)
 	return currentDirStyle.Render(fmt.Sprintf("dir: %s", m.dir))
 }
 
 func (m *model) getFooterView() string {
-	footerStyle := styleRenderer.NewStyle().Width(m.viewport.Width).MarginTop(1).Background(colors["secondaryBackground"])
+	footerStyle := styleRenderer.NewStyle().Width(m.viewport.Width).MarginTop(1).Background(m.theme.secondaryBackground)
 
 	hidden := "off"
 	if m.showHidden {
 		hidden = "on"
 	}
 
-	hiddenStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(colors["tertiaryBackground"]).Foreground(colors["primaryContent"])
+	hiddenStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(m.theme.tertiaryBackground).Foreground(m.theme.primaryContent)
 	hiddenText := hiddenStyle.Render(fmt.Sprintf("Hidden: %s", hidden))
 
 	errorText := ""
 	if m.error != nil {
-		errorStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(colors["error"]).Foreground(colors["primaryContent"])
+		errorStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(m.theme.error).Foreground(m.theme.primaryContent)
 		errorText = errorStyle.Render(m.error.Error())
 	}
 
@@ -74,10 +76,10 @@ func (m *model) getFooterView() string {
 }
 
 func (m *model) getContent() string {
-	var activeStyle = styleRenderer.NewStyle().Foreground(colors["info"]).Bold(true)
-	var defaultStyle = styleRenderer.NewStyle().Foreground(colors["primaryContent"])
+	var activeStyle = styleRenderer.NewStyle().Foreground(m.theme.info).Bold(true)
+	var defaultStyle = styleRenderer.NewStyle().Foreground(m.theme.primaryContent)
 
-	rowStyle := styleRenderer.NewStyle().Background(colors["primaryBackground"])
+	rowStyle := styleRenderer.NewStyle().Background(m.theme.primaryBackground)
 
 	table := table.New().Width(m.viewport.Width).BorderTop(false).BorderRight(false).BorderBottom(false).BorderLeft(false).StyleFunc(func(row, col int) lipgloss.Style {
 		return rowStyle
@@ -171,6 +173,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.viewport.SetContent(m.getContent())
 			m.viewport.SetYOffset(m.active - m.viewport.VisibleLineCount()/2)
+		case "t":
+			if m.theme == darkTheme {
+				m.theme = lightTheme
+			} else {
+				m.theme = darkTheme
+			}
+
+			m.viewport.SetContent(m.getContent())
 		}
 	case tea.WindowSizeMsg:
 		headerHeight := lipgloss.Height(m.getHeaderView())
@@ -194,7 +204,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	appStyle := styleRenderer.NewStyle().Background(colors["primaryBackground"])
+	appStyle := styleRenderer.NewStyle().Background(m.theme.primaryBackground)
 
 	if m.quitting {
 		return ""

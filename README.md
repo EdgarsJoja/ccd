@@ -15,6 +15,8 @@ Use `left` or `esc` or `backspace` to go back.
 
 Use `h` to toggle hidden directories.
 
+Use `t` to switch between dark & light themes.
+
 Use `q` to exit and cd into currently selected directory.
 
 Use `ctrl+c` to exit without cd operation.
