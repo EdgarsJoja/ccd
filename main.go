@@ -49,7 +49,7 @@ func initialModel() model {
 }
 
 func (m *model) getHeaderView() string {
-	var currentDirStyle = styleRenderer.NewStyle().Width(m.viewport.Width).PaddingLeft(2).MarginBottom(1).Background(colors["secondaryBackground"])
+	var currentDirStyle = styleRenderer.NewStyle().Width(m.viewport.Width).PaddingLeft(2).MarginBottom(1).Background(colors["secondaryBackground"]).Foreground(colors["primaryContent"])
 	return currentDirStyle.Render(fmt.Sprintf("dir: %s", m.dir))
 }
 
@@ -61,12 +61,12 @@ func (m *model) getFooterView() string {
 		hidden = "on"
 	}
 
-	hiddenStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(colors["tertiaryBackground"])
+	hiddenStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(colors["tertiaryBackground"]).Foreground(colors["primaryContent"])
 	hiddenText := hiddenStyle.Render(fmt.Sprintf("Hidden: %s", hidden))
 
 	errorText := ""
 	if m.error != nil {
-		errorStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(colors["error"])
+		errorStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(colors["error"]).Foreground(colors["primaryContent"])
 		errorText = errorStyle.Render(m.error.Error())
 	}
 
