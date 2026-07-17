@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -51,53 +52,165 @@ func initialModel() model {
 }
 
 func (m *model) getHeaderView() string {
-	var currentDirStyle = styleRenderer.NewStyle().Width(m.viewport.Width).PaddingLeft(2).MarginBottom(1).Background(m.theme.secondaryBackground).Foreground(m.theme.primaryContent)
-	return currentDirStyle.Render(fmt.Sprintf("dir: %s", m.dir))
+	width := m.viewport.Width
+
+	titleStyle := styleRenderer.NewStyle().
+		Bold(true).
+		Foreground(m.theme.title).
+		PaddingLeft(2)
+
+	title := titleStyle.Render("ccd")
+
+	sepStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.border).
+		Faint(true)
+
+	sep := sepStyle.Render(strings.Repeat("─", max(0, width-10)))
+
+	headerTop := lipgloss.JoinHorizontal(lipgloss.Center, title, " ", sep)
+
+	pathParts := strings.Split(m.dir, "/")
+	breadcrumbStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.muted).
+		PaddingLeft(2).
+		PaddingTop(1).
+		PaddingBottom(1)
+
+	var crumbs []string
+	for _, part := range pathParts {
+		if part == "" {
+			crumbs = append(crumbs, "/")
+			continue
+		}
+		crumbs = append(crumbs, part)
+	}
+
+	pathSep := sepStyle.Render(" / ")
+	breadcrumb := breadcrumbStyle.Render(strings.Join(crumbs, pathSep))
+
+	bottomBorder := styleRenderer.NewStyle().
+		Foreground(m.theme.border).
+		Render(strings.Repeat("─", max(0, width-2)))
+
+	return lipgloss.JoinVertical(lipgloss.Left, headerTop, breadcrumb, bottomBorder)
 }
 
 func (m *model) getFooterView() string {
-	footerStyle := styleRenderer.NewStyle().Width(m.viewport.Width).MarginTop(1).Background(m.theme.secondaryBackground)
+	width := m.viewport.Width
 
-	hidden := "off"
+	badgeStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.primaryBackground).
+		Background(m.theme.accent).
+		Bold(true).
+		PaddingLeft(1).
+		PaddingRight(1)
+
+	badgeMutedStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.primaryBackground).
+		Background(m.theme.muted).
+		Bold(true).
+		PaddingLeft(1).
+		PaddingRight(1)
+
+	hintStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.muted).
+		PaddingRight(2)
+
+	hiddenStatus := "off"
+	hiddenBadge := badgeMutedStyle.Render("h")
 	if m.showHidden {
-		hidden = "on"
+		hiddenStatus = "on"
+		hiddenBadge = badgeStyle.Render("h")
 	}
+	hiddenHint := hintStyle.Render(fmt.Sprintf("%s hidden:%s", hiddenBadge, hiddenStatus))
 
-	hiddenStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(m.theme.tertiaryBackground).Foreground(m.theme.primaryContent)
-	hiddenText := hiddenStyle.Render(fmt.Sprintf("Hidden: %s", hidden))
+	themeBadge := badgeStyle.Render("t")
+	themeHint := hintStyle.Render(fmt.Sprintf("%s theme", themeBadge))
+
+	quitBadge := badgeMutedStyle.Render("q")
+	quitHint := hintStyle.Render(fmt.Sprintf("%s quit", quitBadge))
+
+	cancelBadge := badgeStyle.Render("^c")
+	cancelHint := hintStyle.Render(fmt.Sprintf("%s cancel", cancelBadge))
+
+	topBorder := styleRenderer.NewStyle().
+		Foreground(m.theme.border).
+		Render(strings.Repeat("─", max(0, width-2)))
 
 	errorText := ""
 	if m.error != nil {
-		errorStyle := styleRenderer.NewStyle().PaddingLeft(2).PaddingRight(2).Background(m.theme.error).Foreground(m.theme.primaryContent)
-		errorText = errorStyle.Render(m.error.Error())
+		errorStyle := styleRenderer.NewStyle().
+			Foreground(m.theme.error).
+			Bold(true).
+			PaddingLeft(2)
+		errorText = errorStyle.Render(fmt.Sprintf("  %s", m.error.Error()))
 	}
 
-	return footerStyle.Render(lipgloss.JoinHorizontal(0, hiddenText, errorText))
+	controls := lipgloss.JoinHorizontal(lipgloss.Center, hiddenHint, themeHint, quitHint, cancelHint)
+	footer := lipgloss.JoinVertical(lipgloss.Left, topBorder, controls, errorText)
+
+	return footer
 }
 
 func (m *model) getContent() string {
-	var activeStyle = styleRenderer.NewStyle().Foreground(m.theme.info).Bold(true)
-	var defaultStyle = styleRenderer.NewStyle().Foreground(m.theme.primaryContent)
+	activeBarStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.accent).
+		Bold(true)
 
-	rowStyle := styleRenderer.NewStyle().Background(m.theme.primaryBackground)
+	activeStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.selectedFg).
+		Background(m.theme.selectedBg).
+		Bold(true)
 
-	table := table.New().Width(m.viewport.Width).BorderTop(false).BorderRight(false).BorderBottom(false).BorderLeft(false).StyleFunc(func(row, col int) lipgloss.Style {
-		return rowStyle
-	})
+	defaultStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.primaryContent)
 
-	for i, v := range m.dirItems {
-		var line string
+	hiddenStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.muted)
 
-		if i == m.active {
-			line = activeStyle.Render(fmt.Sprintf("> %s", v.name))
-		} else {
-			line = defaultStyle.Render(fmt.Sprintf("  %s", v.name))
-		}
+	emptyStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.muted).
+		Faint(true).
+		PaddingLeft(2).
+		PaddingTop(1)
 
-		table.Row(line)
+	if len(m.dirItems) == 0 {
+		return emptyStyle.Render("  (no subdirectories)")
 	}
 
-	return table.Render()
+	rowStyle := styleRenderer.NewStyle().
+		Background(m.theme.primaryBackground)
+
+	tbl := table.New().
+		Width(m.viewport.Width).
+		BorderTop(false).
+		BorderRight(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			return rowStyle
+		})
+
+	for i, v := range m.dirItems {
+		iconChar := " "
+		if v.isHidden {
+			iconChar = " "
+		}
+
+		var line string
+		if i == m.active {
+			bar := activeBarStyle.Render(" ")
+			line = bar + activeStyle.Render(fmt.Sprintf(" %s %s ", iconChar, v.name))
+		} else if v.isHidden {
+			line = hiddenStyle.Render(fmt.Sprintf("   %s %s ", iconChar, v.name))
+		} else {
+			line = defaultStyle.Render(fmt.Sprintf("   %s %s ", iconChar, v.name))
+		}
+
+		tbl.Row(line)
+	}
+
+	return tbl.Render()
 }
 
 func (m model) Init() tea.Cmd {
