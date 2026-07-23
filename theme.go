@@ -42,7 +42,7 @@ var lightTheme = Theme{
 	tertiaryBackground:  lipgloss.Color("#e6e6e6"),
 	primaryContent:      lipgloss.Color("#1a1b26"),
 	muted:               lipgloss.Color("#888"),
-	accent:              lipgloss.Color("#2e7de9"),
+	accent:              lipgloss.Color("#7ab8f5"),
 	selectedBg:          lipgloss.Color("#d0e3f7"),
 	selectedFg:          lipgloss.Color("#2e7de9"),
 	border:              lipgloss.Color("#d0d0d0"),
