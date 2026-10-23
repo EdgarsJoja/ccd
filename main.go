@@ -14,19 +14,24 @@ import (
 var styleRenderer = lipgloss.NewRenderer(os.Stderr)
 
 type model struct {
-	dir           string
-	dirItems      []DirItem
-	activeHistory map[string]int
-	active        int
-	quitting      bool
-	chosenDir     string
-	showHidden    bool
-	ready         bool
-	viewport      viewport.Model
-	error         error
-	theme         Theme
-	filter        string
-	filtering     bool
+	dir            string
+	dirItems       []DirItem
+	activeHistory  map[string]int
+	active         int
+	quitting       bool
+	chosenDir      string
+	showHidden     bool
+	ready          bool
+	viewport       viewport.Model
+	error          error
+	theme          Theme
+	filter         string
+	filtering      bool
+	shortcuts      []Shortcut
+	showShortcuts  bool
+	shortcutActive int
+	naming         bool
+	shortcutName   string
 }
 
 func initialModel() model {
@@ -40,6 +45,11 @@ func initialModel() model {
 	defaultShowHidden := false
 	dirItems, err := List(defaultDir, defaultShowHidden)
 
+	shortcuts, shortcutsErr := LoadShortcuts()
+	if err == nil {
+		err = shortcutsErr
+	}
+
 	return model{
 		dir:           defaultDir,
 		dirItems:      dirItems,
@@ -50,6 +60,7 @@ func initialModel() model {
 		showHidden:    defaultShowHidden,
 		error:         err,
 		theme:         darkTheme,
+		shortcuts:     shortcuts,
 	}
 }
 
@@ -107,7 +118,11 @@ func (m *model) getHeaderView() string {
 	}
 
 	pathSep := " / "
-	breadcrumb := breadcrumbStyle.Render(strings.Join(crumbs, pathSep))
+	pathLabel := strings.Join(crumbs, pathSep)
+	if m.showShortcuts {
+		pathLabel += "  ·  shortcuts"
+	}
+	breadcrumb := breadcrumbStyle.Render(pathLabel)
 
 	var filterLine string
 	if m.filtering {
@@ -174,6 +189,27 @@ func (m *model) getFooterView() string {
 		hintStyle.Render(" filter"),
 	)
 
+	shortcutBadge := badgeMutedStyle.Render("s")
+	shortcutLabel := " shortcuts"
+	if m.showShortcuts {
+		shortcutBadge = badgeStyle.Render("s")
+		shortcutLabel = " back"
+	}
+	shortcutHint := lipgloss.JoinHorizontal(lipgloss.Left,
+		shortcutBadge,
+		hintStyle.Render(shortcutLabel),
+	)
+
+	addHint := lipgloss.JoinHorizontal(lipgloss.Left,
+		badgeMutedStyle.Render("a"),
+		hintStyle.Render(" add"),
+	)
+
+	deleteHint := lipgloss.JoinHorizontal(lipgloss.Left,
+		badgeStyle.Render("d"),
+		hintStyle.Render(" delete"),
+	)
+
 	themeHint := lipgloss.JoinHorizontal(lipgloss.Left,
 		badgeStyle.Render("t"),
 		hintStyle.Render(" theme"),
@@ -210,7 +246,25 @@ func (m *model) getFooterView() string {
 		errorText = errorRaw
 	}
 
-	controls := lipgloss.JoinHorizontal(lipgloss.Center, hiddenHint, filterHint, themeHint, quitHint, cancelHint)
+	var controlHints []string
+	if m.naming {
+		enterHint := lipgloss.JoinHorizontal(lipgloss.Left,
+			badgeStyle.Render("enter"),
+			hintStyle.Render(" save"),
+		)
+		escHint := lipgloss.JoinHorizontal(lipgloss.Left,
+			badgeStyle.Render("esc"),
+			hintStyle.Render(" cancel"),
+		)
+		controlHints = []string{enterHint, escHint, cancelHint}
+	} else {
+		controlHints = []string{hiddenHint, filterHint, shortcutHint, addHint}
+		if m.showShortcuts {
+			controlHints = append(controlHints, deleteHint)
+		}
+		controlHints = append(controlHints, themeHint, quitHint, cancelHint)
+	}
+	controls := lipgloss.JoinHorizontal(lipgloss.Center, controlHints...)
 	controlsWidth := lipgloss.Width(controls)
 	if controlsWidth < width {
 		controls += padStyle.Render(strings.Repeat(" ", width-controlsWidth))
@@ -227,6 +281,102 @@ func (m *model) getFooterView() string {
 }
 
 func (m *model) getContent() string {
+	var content string
+	if m.showShortcuts {
+		content = m.getShortcutsContent()
+	} else {
+		content = m.getDirContent()
+	}
+
+	if m.naming {
+		content = m.getShortcutPrompt() + "\n" + content
+	}
+
+	return content
+}
+
+func (m *model) getShortcutPrompt() string {
+	promptStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.accent).
+		Background(m.theme.primaryBackground).
+		Bold(true).
+		PaddingLeft(2).
+		Width(m.viewport.Width)
+
+	prompt := fmt.Sprintf("Add shortcut for %s as: %s▎  (enter save · esc cancel)", m.dir, m.shortcutName)
+
+	return promptStyle.Render(prompt)
+}
+
+func (m *model) getShortcutsContent() string {
+	bg := m.theme.primaryBackground
+
+	activeBarStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.accent).
+		Bold(true)
+
+	activeNameStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.selectedFg).
+		Background(m.theme.selectedBg).
+		Bold(true)
+
+	activePathStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.selectedFg).
+		Background(m.theme.selectedBg)
+
+	nameStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.primaryContent)
+
+	pathStyle := styleRenderer.NewStyle().
+		Foreground(m.theme.muted)
+
+	if len(m.shortcuts) == 0 {
+		emptyStyle := styleRenderer.NewStyle().
+			Foreground(m.theme.muted).
+			Background(bg).
+			Faint(true).
+			PaddingLeft(2).
+			PaddingTop(1).
+			Width(m.viewport.Width)
+
+		return emptyStyle.Render("  (no shortcuts) — press a to add the current directory")
+	}
+
+	rowStyle := styleRenderer.NewStyle().
+		Background(bg)
+
+	tbl := table.New().
+		Width(m.viewport.Width).
+		BorderTop(false).
+		BorderRight(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			return rowStyle
+		})
+
+	for i, shortcut := range m.shortcuts {
+		if i == m.shortcutActive {
+			line := activeBarStyle.Render(" ") +
+				activeNameStyle.Render(fmt.Sprintf("  %s ", shortcut.Name)) +
+				activePathStyle.Render(shortcut.Path+" ")
+			tbl.Row(line)
+			continue
+		}
+
+		line := nameStyle.Render(fmt.Sprintf("   %s ", shortcut.Name)) +
+			pathStyle.Render("  "+shortcut.Path+" ")
+		tbl.Row(line)
+	}
+
+	contentStyle := styleRenderer.NewStyle().
+		Background(bg).
+		Width(m.viewport.Width)
+
+	return contentStyle.Render(tbl.Render())
+}
+
+func (m *model) getDirContent() string {
 	bg := m.theme.primaryBackground
 
 	activeBarStyle := styleRenderer.NewStyle().
@@ -293,6 +443,107 @@ func (m *model) getContent() string {
 	return contentStyle.Render(tbl.Render())
 }
 
+func (m *model) activeIndex() int {
+	if m.showShortcuts {
+		return m.shortcutActive
+	}
+
+	return m.active
+}
+
+func (m *model) refreshView() {
+	m.viewport.SetContent(m.getContent())
+	if m.naming {
+		m.viewport.SetYOffset(0)
+		return
+	}
+	m.viewport.SetYOffset(m.activeIndex() - m.viewport.VisibleLineCount()/2)
+}
+
+func (m *model) startNaming() {
+	m.naming = true
+	m.shortcutName = DefaultShortcutName(m.dir)
+	m.filter = ""
+	m.filtering = false
+	m.refreshView()
+}
+
+func (m *model) saveShortcut() {
+	updated := AddShortcut(m.shortcuts, m.shortcutName, m.dir)
+	if err := SaveShortcuts(updated); err != nil {
+		m.error = err
+		return
+	}
+
+	m.shortcuts = updated
+	m.error = nil
+	m.naming = false
+	m.shortcutName = ""
+}
+
+func (m *model) removeShortcut() {
+	if m.shortcutActive < 0 || m.shortcutActive >= len(m.shortcuts) {
+		return
+	}
+
+	updated := RemoveShortcutAt(m.shortcuts, m.shortcutActive)
+	if err := SaveShortcuts(updated); err != nil {
+		m.error = err
+		return
+	}
+
+	m.shortcuts = updated
+	m.error = nil
+	if m.shortcutActive >= len(m.shortcuts) {
+		m.shortcutActive = len(m.shortcuts) - 1
+	}
+	if m.shortcutActive < 0 {
+		m.shortcutActive = 0
+	}
+}
+
+func (m *model) jumpToShortcut() {
+	if m.shortcutActive < 0 || m.shortcutActive >= len(m.shortcuts) {
+		return
+	}
+
+	shortcut := m.shortcuts[m.shortcutActive]
+	info, err := os.Stat(shortcut.Path)
+	if err != nil {
+		m.error = fmt.Errorf("cannot open shortcut %q: %w", shortcut.Name, err)
+		return
+	}
+	if !info.IsDir() {
+		m.error = fmt.Errorf("shortcut %q is not a directory: %s", shortcut.Name, shortcut.Path)
+		return
+	}
+
+	m.activeHistory[m.dir] = m.active
+	m.dir = shortcut.Path
+	m.dirItems, m.error = List(m.dir, m.showHidden)
+	m.filter = ""
+	m.filtering = false
+	m.showShortcuts = false
+
+	if active, ok := m.activeHistory[m.dir]; ok {
+		m.active = active
+	} else {
+		m.active = 0
+	}
+}
+
+func (m *model) toggleTheme() {
+	if m.theme == darkTheme {
+		m.theme = lightTheme
+	} else {
+		m.theme = darkTheme
+	}
+
+	m.viewport.Style = styleRenderer.NewStyle().
+		Background(m.theme.primaryBackground)
+	m.refreshView()
+}
+
 func (m model) Init() tea.Cmd {
 	return nil
 }
@@ -305,7 +556,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if m.filtering {
+		if m.naming {
+			switch msg.String() {
+			case "ctrl+c":
+				m.quitting = true
+				return m, tea.Quit
+			case "esc":
+				m.naming = false
+				m.shortcutName = ""
+				m.refreshView()
+			case "enter":
+				m.saveShortcut()
+				m.refreshView()
+			case "backspace":
+				runes := []rune(m.shortcutName)
+				if len(runes) > 0 {
+					m.shortcutName = string(runes[:len(runes)-1])
+				}
+				m.refreshView()
+			case "ctrl+u":
+				m.shortcutName = ""
+				m.refreshView()
+			default:
+				if msg.Type == tea.KeyRunes {
+					for _, r := range msg.Runes {
+						m.shortcutName += string(r)
+					}
+					m.refreshView()
+				}
+			}
+		} else if m.filtering {
 			switch msg.String() {
 			case "ctrl+c":
 				m.quitting = true
@@ -364,6 +644,40 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.viewport.SetYOffset(m.active - m.viewport.VisibleLineCount()/2)
 				}
 			}
+		} else if m.showShortcuts {
+			switch msg.String() {
+			case "ctrl+c":
+				m.quitting = true
+				return m, tea.Quit
+			case "q":
+				m.quitting = true
+				m.chosenDir = m.dir
+				return m, tea.Quit
+			case "s", "esc", "left", "backspace":
+				m.showShortcuts = false
+				m.shortcutActive = 0
+				m.refreshView()
+			case "a":
+				m.startNaming()
+			case "up":
+				if m.shortcutActive > 0 {
+					m.shortcutActive -= 1
+				}
+				m.refreshView()
+			case "down":
+				if m.shortcutActive < len(m.shortcuts)-1 {
+					m.shortcutActive += 1
+				}
+				m.refreshView()
+			case "enter", "right":
+				m.jumpToShortcut()
+				m.refreshView()
+			case "d", "delete":
+				m.removeShortcut()
+				m.refreshView()
+			case "t":
+				m.toggleTheme()
+			}
 		} else {
 			switch msg.String() {
 			case "ctrl+c":
@@ -377,6 +691,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filtering = true
 				m.filter = ""
 				m.viewport.SetContent(m.getContent())
+			case "s":
+				m.showShortcuts = true
+				m.shortcutActive = 0
+				m.filter = ""
+				m.filtering = false
+				m.refreshView()
+			case "a":
+				m.startNaming()
 			case "h":
 				m.showHidden = !m.showHidden
 				m.dirItems, m.error = List(m.dir, m.showHidden)
@@ -435,15 +757,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.SetContent(m.getContent())
 				m.viewport.SetYOffset(m.active - m.viewport.VisibleLineCount()/2)
 			case "t":
-				if m.theme == darkTheme {
-					m.theme = lightTheme
-				} else {
-					m.theme = darkTheme
-				}
-
-				m.viewport.Style = styleRenderer.NewStyle().
-					Background(m.theme.primaryBackground)
-				m.viewport.SetContent(m.getContent())
+				m.toggleTheme()
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -464,8 +778,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Background(m.theme.primaryBackground)
 	}
 
-	m.viewport, cmd = m.viewport.Update(msg)
-	cmds = append(cmds, cmd)
+	if _, isKey := msg.(tea.KeyMsg); !isKey || (!m.naming && !m.showShortcuts) {
+		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 
 	return m, tea.Batch(cmds...)
 }
